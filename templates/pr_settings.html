@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PR Settings - Canada Stay Tracker</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Canada Stay Tracker</h1>
+            <p>Track your days in Canada for citizenship application</p>
+            <nav>
+                <a href="{{ url_for('index') }}">Home</a>
+                <a href="{{ url_for('stats') }}">Statistics</a>
+                <a href="{{ url_for('pr_settings') }}" class="active">PR Settings</a>
+            </nav>
+        </header>
+
+        <main>
+            <section class="pr-settings">
+                <h2>Permanent Resident Status Settings</h2>
+                <p class="info-text">
+                    Your Permanent Resident (PR) status date is set to <strong>{{ pr_date }}</strong>.
+                    You need to be physically present in Canada for at least 730 days (2 years) within a 5-year period to be
+                    eligible for PR renewal.
+                </p>
+                
+                <div class="form-group">
+                    <label for="pr_date">Date PR Status Received:</label>
+                    <input type="date" id="pr_date" name="pr_date" value="{{ pr_date }}" readonly>
+                    <small>This date is fixed and cannot be changed.</small>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>Canada Stay Tracker - Keep track of your days in Canada for citizenship purposes</p>
+        </footer>
+    </div>
+</body>
+</html>

@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Statistics - Canada Stay Tracker</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Canada Stay Tracker</h1>
+            <p>Track your days in Canada for citizenship application</p>
+            <nav>
+                <a href="{{ url_for('index') }}">Home</a>
+                <a href="{{ url_for('stats') }}" class="active">Statistics</a>
+                <a href="{{ url_for('pr_settings') }}">PR Settings</a>
+            </nav>
+        </header>
+
+        <main>
+            <section class="stats">
+                <h2>Your Statistics</h2>
+                <div class="stats-card">
+                    <div class="stat-item">
+                        <h3>Total Days in Canada</h3>
+                        <p class="stat-value">{{ total_days }}</p>
+                    </div>
+                    
+                    <div class="stat-item">
+                        <h3>Total Stays</h3>
+                        <p class="stat-value">{{ stays|length }}</p>
+                    </div>
+                    
+                    <div class="stat-item">
+                        <h3>Citizenship Eligibility</h3>
+                        <p class="stat-value citizenship-progress">
+                            <span class="progress-bar">
+                                <span class="progress" style="width: {{ (total_days / 1095) * 100 }}%"></span>
+                            </span>
+                            <span class="progress-text">{{ total_days }} / 1095 days</span>
+                        </p>
+                        <p class="eligibility-info">
+                            Canadian citizenship requires 1,095 days (3 years) of physical presence in Canada within 5 years.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="pr-stats-container">
+                    <h2>PR Renewal Eligibility</h2>
+                    <p class="pr-info">
+                        PR Status Received: <strong>{{ pr_date }}</strong><br>
+                        5-Year Period Ends: <strong>{{ pr_stats.five_year_end_date }}</strong> 
+                        ({{ pr_stats.days_left_in_period }} days remaining)
+                    </p>
+                    
+                    <div class="stats-card">
+                        <div class="stat-item">
+                            <h3>Days in Canada (within 5-year period)</h3>
+                            <p class="stat-value">{{ pr_stats.days_in_period }}</p>
+                        </div>
+                        
+                        <div class="stat-item">
+                            <h3>PR Renewal Eligibility</h3>
+                            <p class="stat-value pr-progress">
+                                <span class="progress-bar">
+                                    <span class="progress" style="width: {{ pr_stats.percentage }}%"></span>
+                                </span>
+                                <span class="progress-text">{{ pr_stats.days_in_period }} / {{ pr_stats.days_needed }} days</span>
+                            </p>
+                            <p class="eligibility-info">
+                                {% if pr_stats.days_remaining > 0 %}
+                                    You need {{ pr_stats.days_remaining }} more days in Canada to be eligible for PR renewal.
+                                {% else %}
+                                    You have met the physical presence requirement for PR renewal!
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="yearly-breakdown">
+                    <h3>Yearly Breakdown</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Year</th>
+                                <th>Days in Canada</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% set years = {} %}
+                            
+                            {% for stay in stays %}
+                                {% set entry = stay.entry_date.split('-') %}
+                                {% set entry_year = entry[0]|int %}
+                                
+                                {% if stay.exit_date %}
+                                    {% set exit = stay.exit_date.split('-') %}
+                                    {% set exit_year = exit[0]|int %}
+                                {% else %}
+                                    {% set today = now().year %}
+                                    {% set exit_year = today %}
+                                {% endif %}
+                                
+                                {% for current_year in range(entry_year, exit_year + 1) %}
+                                    {% if current_year not in years %}
+                                        {% set _ = years.update({current_year: 0}) %}
+                                    {% endif %}
+                                    
+                                    {% set days_in_year = 0 %}
+                                    {% if current_year == entry_year and current_year == exit_year %}
+                                        {% set entry_date = date(entry[0]|int, entry[1]|int, entry[2]|int) %}
+                                        {% if stay.exit_date %}
+                                            {% set exit_date = date(exit[0]|int, exit[1]|int, exit[2]|int) %}
+                                        {% else %}
+                                            {% set exit_date = now() %}
+                                        {% endif %}
+                                        {% set days_in_year = (exit_date - entry_date).days + 1 %}
+                                    {% elif current_year == entry_year %}
+                                        {% set entry_date = date(entry[0]|int, entry[1]|int, entry[2]|int) %}
+                                        {% set year_end = date(current_year, 12, 31) %}
+                                        {% set days_in_year = (year_end - entry_date).days + 1 %}
+                                    {% elif current_year == exit_year %}
+                                        {% set year_start = date(current_year, 1, 1) %}
+                                        {% if stay.exit_date %}
+                                            {% set exit_date = date(exit[0]|int, exit[1]|int, exit[2]|int) %}
+                                        {% else %}
+                                            {% set exit_date = now() %}
+                                        {% endif %}
+                                        {% set days_in_year = (exit_date - year_start).days + 1 %}
+                                    {% else %}
+                                        {% set days_in_year = 365 %}
+                                        {% if (current_year % 4 == 0 and current_year % 100 != 0) or current_year % 400 == 0 %}
+                                            {% set days_in_year = 366 %}
+                                        {% endif %}
+                                    {% endif %}
+                                    
+                                    {% set _ = years.update({current_year: years[current_year] + days_in_year}) %}
+                                {% endfor %}
+                            {% endfor %}
+                            
+                            {% for year, days in years|dictsort %}
+                                <tr>
+                                    <td>{{ year }}</td>
+                                    <td>{{ days }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>Canada Stay Tracker - Keep track of your days in Canada for citizenship purposes</p>
+        </footer>
+    </div>
+</body>
+</html>

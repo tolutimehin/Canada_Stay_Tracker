@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Canada Stay Tracker</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Canada Stay Tracker</h1>
+            <p>Track your days in Canada for citizenship application</p>
+            <!-- Auth Indicator -->
+            <div class="auth-indicator" id="authIndicator">
+                <span class="lock-icon"></span>
+                <span>Locked</span>
+            </div>
+            <nav>
+                <a href="{{ url_for('index') }}" class="active">Home</a>
+                <a href="{{ url_for('stats') }}">Statistics</a>
+                <a href="{{ url_for('pr_settings') }}">PR Settings</a>
+            </nav>
+        </header>
+
+        <main>
+            <section class="add-stay">
+                <h2>Add New Stay</h2>
+                <form id="addStayForm" action="{{ url_for('add_stay') }}" method="post">
+                    <div class="form-group">
+                        <label for="entry_date">Entry Date:</label>
+                        <input type="date" id="entry_date" name="entry_date" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="exit_date">Exit Date:</label>
+                        <input type="date" id="exit_date" name="exit_date">
+                        <small>Leave blank if you're currently in Canada</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="notes">Notes:</label>
+                        <textarea id="notes" name="notes" rows="2"></textarea>
+                    </div>
+                    
+                    <button type="submit" class="btn">Add Stay</button>
+                </form>
+            </section>
+
+            <section class="stays-list">
+                <h2>Your Stays</h2>
+                {% if stays %}
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Entry Date</th>
+                                <th>Exit Date</th>
+                                <th>Days</th>
+                                <th>Notes</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for stay in stays %}
+                                <tr>
+                                    <td>{{ stay.entry_date }}</td>
+                                    <td>{{ stay.exit_date if stay.exit_date else 'Present' }}</td>
+                                    <td>
+                                        {% if stay.exit_date %}
+                                            {% set entry = stay.entry_date.split('-') %}
+                                            {% set exit = stay.exit_date.split('-') %}
+                                            {% set entry_date = date(entry[0]|int, entry[1]|int, entry[2]|int) %}
+                                            {% set exit_date = date(exit[0]|int, exit[1]|int, exit[2]|int) %}
+                                            {{ (exit_date - entry_date).days + 1 }}
+                                        {% else %}
+                                            {% set entry = stay.entry_date.split('-') %}
+                                            {% set entry_date = date(entry[0]|int, entry[1]|int, entry[2]|int) %}
+                                            {% set today = date.today() %}
+                                            {{ (today - entry_date).days + 1 }}
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ stay.notes }}</td>
+                                    <td class="actions">
+                                        <button class="btn-edit" onclick="editStay({{ stay.id }}, '{{ stay.entry_date }}', '{{ stay.exit_date if stay.exit_date else '' }}', '{{ stay.notes }}')">Edit</button>
+                                        <form id="deleteForm{{ stay.id }}" action="{{ url_for('delete_stay', stay_id=stay.id) }}" method="post" onsubmit="return confirmDelete({{ stay.id }})">
+                                            <button type="submit" class="btn-delete">Delete</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    <p>No stays recorded yet. Add your first stay above!</p>
+                {% endif %}
+            </section>
+
+            <!-- Edit Stay Modal -->
+            <div id="editModal" class="modal">
+                <div class="modal-content">
+                    <span class="close" onclick="document.getElementById('editModal').style.display='none'">&times;</span>
+                    <h2>Edit Stay</h2>
+                    <form id="editForm" method="post">
+                        <div class="form-group">
+                            <label for="edit_entry_date">Entry Date:</label>
+                            <input type="date" id="edit_entry_date" name="entry_date" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="edit_exit_date">Exit Date:</label>
+                            <input type="date" id="edit_exit_date" name="exit_date">
+                            <small>Leave blank if you're currently in Canada</small>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="edit_notes">Notes:</label>
+                            <textarea id="edit_notes" name="notes" rows="2"></textarea>
+                        </div>
+                        
+                        <button type="submit" class="btn">Update Stay</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Auth Modal (Password Protection) -->
+            <div id="authModal" class="modal">
+                <div class="modal-content">
+                    <span class="close" onclick="closeAuthModal()">&times;</span>
+                    <h2>Authentication Required</h2>
+                    <div class="form-group">
+                        <label for="password">Enter Password:</label>
+                        <input type="password" id="password" name="password" required>
+                        <p id="authError" style="color: red; display: none;">Incorrect password. Please try again.</p>
+                    </div>
+                    <button id="submitAuth" class="btn">Submit</button>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>Canada Stay Tracker - Keep track of your days in Canada for citizenship purposes</p>
+        </footer>
+    </div>
+
+    <script>
+        // Global variable to track authentication state
+        let isAuthenticated = false;
+        const CORRECT_PASSWORD = "4190";
+        const authIndicator = document.getElementById('authIndicator');
+
+        // Authentication modal functionality
+        const authModal = document.getElementById('authModal');
+        let pendingAction = null;
+        let pendingStayId = null;
+
+        function showAuthModal(action, stayId = null) {
+            pendingAction = action;
+            pendingStayId = stayId;
+            document.getElementById('password').value = '';
+            document.getElementById('authError').style.display = 'none';
+            authModal.style.display = 'block';
+        }
+
+        function closeAuthModal() {
+            authModal.style.display = 'none';
+            pendingAction = null;
+            pendingStayId = null;
+        }
+
+        function checkPassword() {
+            const password = document.getElementById('password').value;
+            if (password === CORRECT_PASSWORD) {
+                isAuthenticated = true;
+                closeAuthModal();
+                
+                // Update UI to show authenticated status
+                authIndicator.classList.add('authenticated');
+                authIndicator.innerHTML = '<span class="unlock-icon"></span><span>Unlocked</span>';
+                
+                // Execute the pending action
+                if (pendingAction === 'edit' && pendingStayId !== null) {
+                    actuallyEditStay(pendingStayId);
+                } else if (pendingAction === 'delete' && pendingStayId !== null) {
+                    actuallyDeleteStay(pendingStayId);
+                } else if (pendingAction === 'add') {
+                    document.getElementById('addStayForm').submit();
+                }
+            } else {
+                document.getElementById('authError').style.display = 'block';
+            }
+        }
+
+        // Intercept edit action
+        function editStay(id, entryDate, exitDate, notes) {
+            if (isAuthenticated) {
+                actuallyEditStay(id, entryDate, exitDate, notes);
+            } else {
+                showAuthModal('edit', id);
+            }
+        }
+
+        function actuallyEditStay(id, entryDate, exitDate, notes) {
+            document.getElementById('editForm').action = `/update_stay/${id}`;
+            document.getElementById('edit_entry_date').value = entryDate;
+            document.getElementById('edit_exit_date').value = exitDate;
+            document.getElementById('edit_notes').value = notes;
+            document.getElementById('editModal').style.display = 'block';
+        }
+
+        // Intercept delete action
+        function confirmDelete(id) {
+            if (isAuthenticated) {
+                return confirm('Are you sure you want to delete this stay?');
+            } else {
+                showAuthModal('delete', id);
+                return false;
+            }
+        }
+
+        function actuallyDeleteStay(id) {
+            if (confirm('Are you sure you want to delete this stay?')) {
+                document.getElementById(`deleteForm${id}`).submit();
+            }
+        }
+
+        // Intercept add stay action
+        function interceptAddStay(event) {
+            if (!isAuthenticated) {
+                event.preventDefault();
+                showAuthModal('add');
+            }
+        }
+
+        // Initialize event listeners when DOM is loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            // Set up add stay form
+            const addStayForm = document.getElementById('addStayForm');
+            if (addStayForm) {
+                addStayForm.addEventListener('submit', interceptAddStay);
+            }
+            
+            // Set up auth button
+            document.getElementById('submitAuth').addEventListener('click', checkPassword);
+            
+            // Allow pressing Enter in password field
+            document.getElementById('password').addEventListener('keyup', function(event) {
+                if (event.key === 'Enter') {
+                    checkPassword();
+                }
+            });
+            
+            // Close modal when clicking outside
+            window.onclick = function(event) {
+                if (event.target == authModal) {
+                    closeAuthModal();
+                } else if (event.target == document.getElementById('editModal')) {
+                    document.getElementById('editModal').style.display = 'none';
+                }
+            }
+        });
+    </script>
+</body>
+</html>
